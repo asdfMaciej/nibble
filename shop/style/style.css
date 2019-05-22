@@ -1,0 +1,209 @@
+div#content, body, div.post_content, div.post_text {
+	background-color: #FFFFFF;
+	color: #131516;
+}
+div#footer, div#header {
+	background-color: #E69512;
+	color: #F0F0F0 !important;
+}
+div#sidebar {
+	background-color: #0C4C6F;
+	color: #F0F0F0 !important;
+}
+a.white, a.white:hover, a.white:active, a.white:visited {
+	color: #F0F0F0 !important;
+}
+div.footer_bottom {
+	background-color: #212121 !important;
+}
+html {
+	height: 100%;
+}
+body {
+	height: 100%;
+}
+div#main_container {
+	display: block;
+	width: 100%;
+	margin: 0;
+}
+div#content {
+	flex: 1 0 auto;
+	padding: 1%;
+	margin-left: 200px;
+}
+div#sidebar {
+	width: 184px;
+	float: left;
+	height: 100%;
+	font-size: 100%;
+	text-align: center;
+	padding: 8px;
+}
+div#add_form {
+	text-align: center;
+	font-size: 125%;
+}
+body {
+	display: flex;
+	height: 100%;
+	flex-direction: column;
+	font-family: Roboto, Arial, sans-serif;
+	padding: 0;
+	margin: 0px;
+}
+div#header {
+	min-height: 8%;
+	padding: 2%;
+	margin: 0;
+	width: 100%;
+	flex-shrink: 0;
+	font-size: 380%;
+}
+div#header_message {
+	padding: 1%;
+	font-size: 150%;
+}
+div.next_posts {
+	font-size: 115%;
+	font-weight: normal;
+	text-decoration: none;
+	padding-right: 12px;
+	padding-left: 12px;
+	padding-bottom: 8px;
+	padding-top: 4px;
+	background-color: #DADEDF;
+	text-align: center;
+}
+div#footer {
+	height: 5%;
+	padding: 2%;
+	margin: auto auto 0 auto;
+	width: 100%; 
+	flex-shrink: 0;
+	font-size: 120%;
+}
+.posts_container {
+	min-height: 100%;
+	display: flex;
+	flex-direction: column;
+	padding-right: 2%;
+	padding-left: 2%;
+	height: 100%;
+}
+.posts_container > div {
+	flex: 1;
+	display: relative;
+	justify-content: center;
+	flex-direction: column;
+	height: 100%;
+}
+div.post {
+	background: white;
+	border-bottom: 12px solid #DADEDF;
+	padding-top: 0%;
+	padding-bottom: 1%;
+	padding-right: 0%;
+	padding-left: 0%;
+	display: inline-flex;
+	flex-direction: row;
+	width: 100%;
+	padding: 8px;
+}
+a.post {
+	text-decoration: none;
+	color: #131516;
+	width: 100%;
+}
+div.inline-block
+{
+	display: inline-block;
+}
+div.post_icon {
+	flex: 0 0 5%;
+	font-size: 300%;
+	padding-left: 1%;
+}
+div.post_iconr {
+	flex: 0 0 130px;
+	font-size: 300%;
+	padding-left: 0%;
+	padding-right: 1%;
+	padding-top: 0.5%;
+	display: inline-block;
+}
+div.post_iconr > a {
+	display: inline-block;
+	min-width: 0%;
+	padding: 0;
+	margin: 0;
+}
+div.post_rest {
+	flex-grow: 1;
+	flex-shrink: 0;
+}
+div.post_title {
+	padding-top: 1%;
+	padding-left: 1%;
+	font-size: 150%;
+	font-weight: bold;
+}
+div.post_text {
+	padding: 2%;
+	padding-top: 0.5%;
+	padding-bottom: 0.5%;
+	margin: 0;
+	margin-left: 8px;
+	margin-right: 8px;
+}
+div.post_date {
+	padding-left: 2%;
+	font-size: 80%;
+	text-decoration: underline;
+}
+div.post_content {
+	padding: 1%;
+	padding-left: 3%;
+	padding-bottom: 1%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.noborder {
+	border-bottom: none;
+}
+div.flexcol {
+	flex-direction: column;
+}
+
+table.schedule {
+	margin: 0;
+	padding: 0;
+	
+	width: 100%;
+	border-collapse: collapse;
+	border-spacing: 0;
+	font-size: calc(8px + .4vw);
+}
+table.schedule > tbody > tr > td {
+	margin: 0;
+	padding: 6px;
+	text-align: center;
+	height: 70px;
+	min-width: 10%;
+	border: 1px solid black;
+}
+table.schedule > tbody > tr > td > div:nth-child(even) {
+	background-color:rgba(0, 0, 0, 0.2);
+}
+table.schedule > tbody > tr > th {
+	height: 70px;
+	min-width: 70px;
+	padding: 6px;
+}
+table.schedule > tbody > tr.godziny > td{
+	border: 0;
+	background-color: #34888c;
+}
+table.schedule > tbody > tr > th {
+	background-color: #5bd0c8;
+}

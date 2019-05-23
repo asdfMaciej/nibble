@@ -6,14 +6,34 @@ use \ReflectionProperty;
 
 class DBModel {
 	/*
-		Used and modified code from: 
+		Parts of code are based on: 
 			https://catchmetech.com/en/post/94/how-to-create-an-orm-framework-in-pure-php
 	*/
-	protected $table_name;
+	protected static $table_name;
+	protected static $foreign_fields = [];
+	protected static $primary_key;
+	protected $aliases = [];
+
 	protected $database;
 
 	public function __construct($database) {
 		$this->database = $database;
+	}
+
+	public function __get($key) {
+		if (array_key_exists($key, $this->aliases)) {
+			return $this->{$this->aliases[$key]};
+		}
+		return null;
+	}
+
+	public function __set($key, $value) {
+		if (array_key_exists($key, $this->aliases)) {
+			$this->{$this->aliases[$key]} = $value;
+			return;
+		}
+		$this->{$key} = $value;
+		return;
 	}
 
 	public function init() {} // virtual
@@ -25,12 +45,18 @@ class DBModel {
 		$key_value_pairs = [];
 		$parameters = [];
 
+		$primary = $this->getPrimaryKey();
 		foreach ($public_fields as $property) {
 			$property_name = $property->getName();
-			$value = $this->{$property_name};
-			if (is_null($value)) { // && $property_name != "id"
+			if ($property_name == $primary) {
 				continue;
 			}
+
+			$value = $this->{$property_name};
+			if (is_null($value)) {
+				continue;
+			}
+
 			$param_name = ":$property_name";
 
 			$key_value_pairs[] = "`$property_name` = $param_name";
@@ -40,9 +66,11 @@ class DBModel {
 		$set_clause = implode(', ', $key_value_pairs);
 		
 		$query = '';
-		$table_name = $this->table_name;
-		if ($this->id > 0) {
-			$query = "UPDATE `$table_name` SET $set_clause WHERE id = :id";
+		$table_name = $this->getTableName();
+
+		if ($this->{$primary} > 0) {
+			$query = "UPDATE `$table_name` SET $set_clause WHERE $primary = :$primary";
+			$parameters[":$primary"] = $this->{$primary};
 		} else {
 			$query = "INSERT INTO `$table_name` SET $set_clause";
 		}
@@ -53,6 +81,124 @@ class DBModel {
 		return $success;
 	}
 
+	private function addJoinFields($addFields, $model) {
+		$table = $model::getTableName();
+		$primary = $model::getPrimaryKey();
+		$fields = $model::getFields();
+
+		foreach ($fields as $field) {
+			$alias = $table."_".$field;
+			$addFields[] = "$table.$field AS $alias";
+		}
+
+		return $addFields;
+	}
+
+	private function getWhere($where=[]) {
+		$conditions = [];
+		$params = []; 
+		foreach ($where as $key => $value) {
+			if (is_array($value)) {
+				$condition = "$key IN (";
+				$potential = [];
+				foreach ($value as $n => $v) {
+					$param = ":$key" . "__$n";
+					$potential[] = $param;
+					$params[$param] = $v;
+				}
+				$condition .= implode(", ", $potential) . ")";
+			} else {
+				$param = ":$key";
+				$condition = "$key = $param";
+				$params[$param] = $value;
+			}
+			$conditions[] = $condition;
+		}
+
+		$query = " WHERE " . implode(" AND ", $conditions);
+		if (count($where) == 0) {
+			$query = "";
+		}
+		$returned = [
+			"query" => $query,
+			"params" => $params
+		];
+		return $returned;
+	}
+
+	private function getQuery($where=[]) {
+		$main_table = $this->getTableName();
+		$fields = [];
+		$fields = $this->addJoinFields($fields, $this);
+
+		$used_models = [$this];
+
+		$query_join = "";
+		$foreign = $this->getForeignFields();
+		foreach ($foreign as $join_element) {
+			$model = $join_element["model"];
+			$used_models[] = $model;
+
+			$foreign_table = $model::getTableName();
+			$foreign_primary = $model::getPrimaryKey();
+			$fields = $this->addJoinFields($fields, $model);
+
+			$method = $join_element["method"];
+			$key = $join_element["key"];
+
+			$join = "
+			$method JOIN $foreign_table
+				ON $key = $foreign_table.$foreign_primary
+			";
+			$query_join .= $join;
+		}
+
+		$fields = implode(", ", $fields);
+		$params = [];
+
+		$where = $this->getWhere($where);
+		$query_where = $where["query"];
+		$params = array_merge($params, $where["params"]);
+
+		$query = "
+		SELECT $fields 
+		FROM $main_table
+		$query_join
+		$query_where
+		";
+
+		$returned = [
+			"query" => $query,
+			"params" => $params,
+			"models" => $used_models
+		];
+		return $returned;
+	}
+
+	public function get($where=[]) {
+		$q = $this->getQuery($where);
+		$query = $q["query"];
+		$params = $q["params"];
+		$models = $q["models"];
+
+		$statement = $this->database->prepare($query);
+		$success = $statement->execute($params);
+		if (!$success) {
+			return False;
+		}
+
+		$rows = $statement->fetchAll(PDO::FETCH_ASSOC);
+
+		$result = [];
+		foreach ($rows as $row) {
+			foreach ($models as $model) {
+				$result_row[$model::getTableName()] = $model::fromArray($this->database, $row);
+			}
+			$result[] = $result_row;
+		}
+		return $result;	
+	}
+
 	public static function fromArray($database, $array) {
 		$model = get_called_class(); // it will be inherited
 		$class = new ReflectionClass($model); // hence we need the child class
@@ -60,12 +206,14 @@ class DBModel {
 		$new_class = $class->newInstance($database);
 		$public_fields = $class->getProperties(ReflectionProperty::IS_PUBLIC);
 
+		$table = static::$table_name;
 		foreach ($public_fields as $property) {
 			$property_name = $property->getName();
-			$property_exists = isset($array[$property_name]);
+			$array_key = $table . "_" . $property_name;
+			$property_exists = isset($array[$array_key]);
 
 			if ($property_exists) {
-				$value = $array[$property_name];
+				$value = $array[$array_key];
 				$property->setValue($new_class, $value);
 			}
 		}
@@ -74,10 +222,92 @@ class DBModel {
 
 		return $new_class;
 	}
+
+	public static function getTableName() {
+		return static::$table_name;
+	}
+
+	public static function getClassName() {
+		return static::class;
+	}
+
+	public static function getPrimaryKey() {
+		return static::$primary_key;
+	}
+
+	public static function getForeignFields() {
+		return static::$foreign_fields;
+	}
+
+	public static function getFields() {
+		$model = get_called_class();
+		$class = new ReflectionClass($model);
+
+		$instance = $class->newInstance(null);
+		$public_fields = $class->getProperties(ReflectionProperty::IS_PUBLIC);
+
+		$table_name = $instance->getTableName();
+		$primary = $instance->getPrimaryKey();
+
+		$fields = [];
+		foreach ($public_fields as $property) {
+			$property_name = $property->getName();
+			$fields[] = $property_name;
+		}
+
+		return $fields;
+	}
+}
+
+class QueryBuilder {
+	public $model;
+	public $join = [];
+
+	public function generate() {
+		
+	}
+	
+}
+
+class ProductConnection extends DBModel {
+	protected static $table_name = "product_connection";
+	protected static $foreign_fields = [
+		[
+			"key" => "product_connection.pid", 
+			"model" => ProductDB::class,
+			"method" => "inner"
+		], [
+			"key" => "product_connection.cid",
+			"model" => CategoryDB::class,
+			"method" => "inner"
+		]
+	];
+	protected static $primary_key = "id";
+
+	public $sort;
+	public $id;
+	public $pid;
+	public $cid;
 }
 
 class ProductDB extends DBModel {
-	protected $table_name = "product";
+	protected static $table_name = "product";
+	protected static $primary_key = "id";
+	protected static $foreign_fields = [];
+
+	protected $aliases = [
+		"slug" => "key_pl",
+		"name" => "name_pl",
+		"desc" => "desc_pl",
+		"price_normal_netto" => "priceAn",
+		"price_discounted_netto" => "priceBn",
+		"price_normal_brutto" => "priceAg",
+		"price_discounted_brutto" => "priceBg",
+		"photo_small" => "fotos",
+		"photo_medium" => "fotom",
+		"photo_big" => "fotob",
+		"creation_date" => "cdate"
+	];
 
 	public $id;
 	public $key_pl;
@@ -99,6 +329,23 @@ class ProductDB extends DBModel {
 	public $purchase_count;
 	public $view_count;
 	public $view_date;
+	public $cdate;
+}
+
+class CategoryDB extends DBModel {
+	protected static $table_name = "category";
+	protected static $primary_key = "id";
+	protected static $foreign_fields = [];
+
+	public $id;
+	public $key_pl;
+	public $sub;
+	public $level;
+	public $sub_count;
+	public $name_pl;
+	public $sort;
+	public $visible_pl;
+	public $group;
 	public $cdate;
 }
 

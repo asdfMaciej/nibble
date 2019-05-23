@@ -3,8 +3,11 @@ include_once __DIR__ . "/../env/config.php";
 
 include_once ROOT_PATH . "/config/database.php";
 include_once ROOT_PATH . "/config/functions.php";
+include_once ROOT_PATH . "/model/basket.php";
 
-use Boilerplate\User;
+use Model\Basket;
+use Model\Product;
+use Model\History;
 
 interface ResponseBuilderInterface {
 	public function generate();
@@ -65,7 +68,7 @@ class DataFromArray {
 	}
 
 	public function &__get($key) {
-		$value = $this->array[$key] ?? "";
+		$value = $this->array[$key] ?? null;
 		return $value;
 	}
 
@@ -184,6 +187,22 @@ class WebBuilderConfig {
 	public $action_method = "get";
 }
 
+class PageSnackbar {
+	private $message = "";
+	private $code = 200;
+
+	public function setMessage($msg) {
+		$this->message = $msg;
+	}
+	public function setCode($code) {
+		$this->code = $code;
+	}
+
+	public function getMessage() { return $this->message; }
+	public function getCode() { return $this->code; }
+}
+
+
 class WebBuilder {
 	protected $config;
 	protected $metadata;
@@ -192,9 +211,7 @@ class WebBuilder {
 	protected $database_class;
 	protected $response;
 	protected $data;
-
-	protected $top_message = "";
-	protected $top_message_code = 200;
+	protected $snackbar;
 
 	protected $token = "";
 	protected $get_method = "get";
@@ -212,6 +229,7 @@ class WebBuilder {
 		$this->metadata = new PageMetadata();
 		$this->config = new WebBuilderConfig();
 		$this->data = new DataHandler();
+		$this->snackbar = new PageSnackbar();
 	}
 
 	public function __destruct() {
@@ -226,10 +244,10 @@ class WebBuilder {
 
 		$this->response->addTemplate($this->template_path->head, $this->metadata->getMetadata());
 
-		if ($this->top_message) {
+		if ($this->snackbar->getMessage()) {
 			$this->response->addTemplate($this->template_path->header_msg, [
-				"message" => $this->top_message,
-				"code" => $this->top_message_code,
+				"message" => $this->snackbar->getMessage(),
+				"code" => $this->snackbar->getCode(),
 			]);
 		}
 
@@ -278,8 +296,8 @@ class WebBuilder {
 		$call = [$this, $function_name]; // class object, function name
 		$response = call_user_func($call, $this); // $this is passed as a param
 		if (is_array($response)) {
-			$this->top_message_code = $response[0];
-			$this->top_message = $response[1];
+			$this->snackbar->setCode($response[0]);
+			$this->snackbar->setMessage($response[1]);
 		}
 		return True;
 	}
@@ -359,6 +377,56 @@ class Template implements TemplateInterface {
 		$temp = new Template();
 		$temp->setTemplateFile($filename);
 		$temp->generate($data);
+	}
+}
+
+
+class ShopBuilder extends WebBuilder {
+	protected $basket;
+	protected $history;
+
+	public function __construct() {
+		parent::__construct();
+		$this->basket = new Basket($this->data);
+		$this->history = new History($this->data);
+
+		if (DEBUG) {
+			$products_amount = 5;
+
+			$products = [];
+			for ($i = 0; $i < $products_amount; $i++) {
+				$product = new Product();
+				$product->test();
+				$products[] = $product->asBasketItem();
+			}
+
+			$lodowka = new Product();
+			$lodowka->test();
+			$lodowka->name = "Lodówka";
+			$lodowka->symbol = "lody";
+			$lodowka->slug = "lodowka";
+
+			$this->basket->update(100, 123, 10, $products);
+			$this->basket->addProduct($lodowka);
+
+			$this->data->session->history = [
+				"viewed_products" => [
+					["id" => 11, 
+					 "seen" => "1553173437", // over
+					 "category" => "meble"],
+
+					["id" => 13,
+					 "seen" => "1558530237",
+					 "category" => "kafelki-lazienkowe"],
+
+					["id" => 100,
+					 "seen" => "1558443837",
+					 "category" => "meble"]
+				],
+
+				"clear_date" => "2019-05-21"
+			];
+		}
 	}
 }
 ?>

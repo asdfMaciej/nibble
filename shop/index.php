@@ -11,8 +11,8 @@ $pages = [
 		"index" => "pages/admin.php",
 	],
 	"category" => [
-		"index" => "pages/class_index.php",
-		"*" => "pages/class_index.php"
+		"index" => "pages/category.php",
+		"*" => "pages/category.php"
 	],
 	"order" => [
 		"*" => "pages/class_index.php"

@@ -1,5 +1,5 @@
 <div id="header">
-	<a href="/" style="color: #F0F0F0;"><b>Kaszkowiak</b></a>
+	-- header --
 </div>
 
 <div id="main_container">

@@ -389,44 +389,6 @@ class ShopBuilder extends WebBuilder {
 		parent::__construct();
 		$this->basket = new Basket($this->data);
 		$this->history = new History($this->data);
-
-		if (DEBUG) {
-			$products_amount = 5;
-
-			$products = [];
-			for ($i = 0; $i < $products_amount; $i++) {
-				$product = new Product();
-				$product->test();
-				$products[] = $product->asBasketItem();
-			}
-
-			$lodowka = new Product();
-			$lodowka->test();
-			$lodowka->name = "Lodówka";
-			$lodowka->symbol = "lody";
-			$lodowka->slug = "lodowka";
-
-			$this->basket->update(100, 123, 10, $products);
-			$this->basket->addProduct($lodowka);
-
-			$this->data->session->history = [
-				"viewed_products" => [
-					["id" => 11, 
-					 "seen" => "1553173437", // over
-					 "category" => "meble"],
-
-					["id" => 13,
-					 "seen" => "1558530237",
-					 "category" => "kafelki-lazienkowe"],
-
-					["id" => 100,
-					 "seen" => "1558443837",
-					 "category" => "meble"]
-				],
-
-				"clear_date" => "2019-05-21"
-			];
-		}
 	}
 }
 ?>

@@ -4,32 +4,29 @@ use \PDO;
 use \ReflectionClass;
 use \ReflectionProperty;
 
-class DBModel {
-	/*
-		Parts of code are based on: 
-			https://catchmetech.com/en/post/94/how-to-create-an-orm-framework-in-pure-php
-	*/
-	protected static $table_name;
-	protected static $foreign_fields = [];
-	protected static $primary_key;
-	protected $aliases = [];
+class Model {
+	protected static $aliases = [];
+	protected $computed = [];
 
-	protected $database;
+	public function __construct() {}
 
-	public function __construct($database) {
-		$this->database = $database;
-	}
-
-	public function __get($key) {
-		if (array_key_exists($key, $this->aliases)) {
-			return $this->{$this->aliases[$key]};
+	public function &__get($key) {
+		if (array_key_exists($key, static::$aliases)) {
+			$key = static::$aliases[$key];
 		}
-		return null;
+
+		if (array_key_exists($key, $this->computed)) {
+			$value = $this->computed[$key]();
+			return $value;
+		}
+
+		$value = &$this->{$key} ?? null;
+		return $value;
 	}
 
 	public function __set($key, $value) {
-		if (array_key_exists($key, $this->aliases)) {
-			$this->{$this->aliases[$key]} = $value;
+		if (array_key_exists($key, static::$aliases)) {
+			$this->{static::$aliases[$key]} = $value;
 			return;
 		}
 		$this->{$key} = $value;
@@ -37,22 +34,117 @@ class DBModel {
 	}
 
 	public function init() {} // virtual
+	public function save() {} // virtual
 
-	public function save() {
-		$class = new ReflectionClass($this);
+	public static function getFields($model=null) {
+		if (is_null($model)) {
+			$model = get_called_class();
+		}
+
+		$class = new ReflectionClass($model);
 		$public_fields = $class->getProperties(ReflectionProperty::IS_PUBLIC);
 
-		$key_value_pairs = [];
-		$parameters = [];
-
-		$primary = $this->getPrimaryKey();
+		$props = [];
 		foreach ($public_fields as $property) {
 			$property_name = $property->getName();
+			$props[] = $property_name;
+		}
+
+		return $props; 
+	}
+
+	public function getValue($key) {
+		return $this->{$key};
+	}
+
+	public function setValue($key, $value) {
+		$this->{$key} = $value;
+	}
+
+}
+
+class SessionModel extends Model {
+	private $class_name;
+	private $session_group = "SessionModels";
+
+	public function __construct() {
+		parent::__construct();
+
+		$this->class_name = static::class;
+		$this->initSession();
+
+		$this->init();
+	}
+
+	public function __set($key, $value) {
+		if (array_key_exists($key, static::$aliases)) {
+			$key = static::$aliases[$key];
+		}
+		$this->setSessionField($key, $value);
+	}
+
+	public function &__get($key) {
+		if (array_key_exists($key, static::$aliases)) {
+			$key = static::$aliases[$key];
+		}
+
+		if (array_key_exists($key, $this->computed)) {
+			$value = $this->computed[$key]();
+			return $value;
+		}
+		return $this->getSessionField($key);
+	}
+
+	protected function initSession() {
+		if (!isset($_SESSION[$this->session_group])) {
+			$_SESSION[$this->session_group] = [];
+		}
+
+		if (!isset($_SESSION[$this->session_group][$this->class_name])) {
+			$_SESSION[$this->session_group][$this->class_name] = $this->fields;
+		}
+	}
+
+	protected function &getSessionField($field) {
+		return $_SESSION[$this->session_group][$this->class_name][$field];
+	}
+
+	protected function setSessionField($field, $value) {
+		$_SESSION[$this->session_group][$this->class_name][$field] = $value;
+	}
+}
+
+class DBModel extends Model {
+	/*
+		Parts of code are based on: 
+			https://catchmetech.com/en/post/94/how-to-create-an-orm-framework-in-pure-php
+	*/
+	protected static $table_name;
+	protected static $foreign_fields = [];
+	protected static $primary_key;
+	protected static $aliases = [];
+
+	protected $database;
+
+	public function __construct($database) {
+		$this->database = $database;
+	}
+
+
+	public function init() {} // virtual
+
+	public function save() {
+		$key_value_pairs = [];
+		$parameters = [];
+		$primary = $this->getPrimaryKey();
+
+		$props = static::getFields();
+		foreach ($props as $property_name) {
 			if ($property_name == $primary) {
 				continue;
 			}
 
-			$value = $this->{$property_name};
+			$value = $this->getValue($property_name);
 			if (is_null($value)) {
 				continue;
 			}
@@ -68,9 +160,10 @@ class DBModel {
 		$query = '';
 		$table_name = $this->getTableName();
 
-		if ($this->{$primary} > 0) {
+		$primary_id = $this->getValue($primary);
+		if ($primary_id > 0) {
 			$query = "UPDATE `$table_name` SET $set_clause WHERE $primary = :$primary";
-			$parameters[":$primary"] = $this->{$primary};
+			$parameters[":$primary"] = $primary_id;
 		} else {
 			$query = "INSERT INTO `$table_name` SET $set_clause";
 		}
@@ -94,21 +187,67 @@ class DBModel {
 		return $addFields;
 	}
 
-	private function getWhere($where=[]) {
+	private function getWhere($where, $used_models) {
 		$conditions = [];
-		$params = []; 
+		$params = [];
 		foreach ($where as $key => $value) {
+			/*
+				if only column provided: it finds the
+					first table with such column or alias
+			*/
+			if (strpos($key, '.') === false) {
+				foreach ($used_models as $model) { // calling body is 1st
+					$fields = $model::getFields();
+					$key_check = $key . "";
+					if (array_key_exists($key, $model::$aliases)) {
+						$key_check = $model::$aliases[$key];
+					}
+
+					if (in_array($key_check, $fields)) {
+						$key = $model::getTableName() . "." . $key_check;
+						break;
+					}
+				}
+			}
+
+			if (strpos($key, '.') === false) {
+				throw new Exception("Unable to find key: $key");
+			}
+
+			/*
+				in case table.alias was provided at start,
+				it finds the matching column
+			*/
+			$parts = explode('.', $key);
+			$key_table = strtolower($parts[0]);
+			$key_column = $parts[1];
+			foreach ($used_models as $model) {
+				$table_name = strtolower($model::getTableName());
+				if ($table_name != $key_table) {
+					continue;
+				}
+
+				if (array_key_exists($key_column, $model::$aliases)) {
+					$key_column = $model::$aliases[$key_column];
+					break;
+				}
+			}
+
+			$key = "$key_table.$key_column";
+
 			if (is_array($value)) {
 				$condition = "$key IN (";
 				$potential = [];
 				foreach ($value as $n => $v) {
 					$param = ":$key" . "__$n";
+					$param = str_replace('.', '_', $param);
 					$potential[] = $param;
 					$params[$param] = $v;
 				}
 				$condition .= implode(", ", $potential) . ")";
 			} else {
 				$param = ":$key";
+				$param = str_replace('.', '_', $param);
 				$condition = "$key = $param";
 				$params[$param] = $value;
 			}
@@ -156,7 +295,7 @@ class DBModel {
 		$fields = implode(", ", $fields);
 		$params = [];
 
-		$where = $this->getWhere($where);
+		$where = $this->getWhere($where, $used_models);
 		$query_where = $where["query"];
 		$params = array_merge($params, $where["params"]);
 
@@ -183,6 +322,7 @@ class DBModel {
 
 		$statement = $this->database->prepare($query);
 		$success = $statement->execute($params);
+		var_dump($query);
 		if (!$success) {
 			return False;
 		}
@@ -207,6 +347,7 @@ class DBModel {
 		$public_fields = $class->getProperties(ReflectionProperty::IS_PUBLIC);
 
 		$table = static::$table_name;
+		$alias_fields = [];
 		foreach ($public_fields as $property) {
 			$property_name = $property->getName();
 			$array_key = $table . "_" . $property_name;
@@ -239,34 +380,6 @@ class DBModel {
 		return static::$foreign_fields;
 	}
 
-	public static function getFields() {
-		$model = get_called_class();
-		$class = new ReflectionClass($model);
-
-		$instance = $class->newInstance(null);
-		$public_fields = $class->getProperties(ReflectionProperty::IS_PUBLIC);
-
-		$table_name = $instance->getTableName();
-		$primary = $instance->getPrimaryKey();
-
-		$fields = [];
-		foreach ($public_fields as $property) {
-			$property_name = $property->getName();
-			$fields[] = $property_name;
-		}
-
-		return $fields;
-	}
-}
-
-class QueryBuilder {
-	public $model;
-	public $join = [];
-
-	public function generate() {
-		
-	}
-	
 }
 
 class ProductConnection extends DBModel {
@@ -274,11 +387,11 @@ class ProductConnection extends DBModel {
 	protected static $foreign_fields = [
 		[
 			"key" => "product_connection.pid", 
-			"model" => ProductDB::class,
+			"model" => Product::class,
 			"method" => "inner"
 		], [
 			"key" => "product_connection.cid",
-			"model" => CategoryDB::class,
+			"model" => Category::class,
 			"method" => "inner"
 		]
 	];
@@ -290,12 +403,12 @@ class ProductConnection extends DBModel {
 	public $cid;
 }
 
-class ProductDB extends DBModel {
+class Product extends DBModel {
 	protected static $table_name = "product";
 	protected static $primary_key = "id";
 	protected static $foreign_fields = [];
 
-	protected $aliases = [
+	protected static $aliases = [
 		"slug" => "key_pl",
 		"name" => "name_pl",
 		"desc" => "desc_pl",
@@ -330,12 +443,113 @@ class ProductDB extends DBModel {
 	public $view_count;
 	public $view_date;
 	public $cdate;
+
+	/* DB boilerplate above */
+
+	protected $basket_fields = [
+		"netto" => null,
+		"brutto" => null,
+		"added_time" => null
+	];
+
+	public function getBasketFields() {
+		return $this->basket_fields;
+	}
+
+	public function setBasketFields($basket) {
+		$this->basket_fields = $basket;
+	}
+
+	public function test() {
+		$this->id = 13;
+		$this->slug = "kafelek-lazienkowy";
+		$this->symbol = "K4F3LK1";
+		$this->name = "Kafelek łazienkowy";
+		$this->description = "Poczuj się jak w łazience.";
+		$this->stock = 2138;
+		$this->vat = 23;
+		$this->price_normal_netto = 200;
+		$this->price_normal_brutto = 246;
+		$this->price_discounted_netto = 100;
+		$this->price_discounted_brutto = 123;
+
+		$this->photo_small = "kafelki.jpg";
+		$this->purchase_count = 50;
+		$this->view_count = 3000;
+	}
+
+	public function getPrice($tax="brutto", $discounted=False) {
+		if ($discounted) {
+			return $tax == "netto" ? 
+				$this->price_discounted_netto : 
+				$this->price_discounted_brutto;
+		}
+		return $tax == "netto" ? 
+			$this->price_normal_netto : 
+			$this->price_normal_brutto;
+	}
+
+	public function asBasketItem() {
+		$price_netto = $this->basket_fields["netto"] ?? $this->getPrice("netto");
+		$price_brutto = $this->basket_fields["brutto"] ?? $this->getPrice("brutto");
+		$added_time = $this->basket_fields["added_time"] ?? strtotime("now");
+
+		$item = [
+			"id" => $this->id,
+			"slug" => $this->slug,
+			"name" => $this->name,
+			"price_netto" => $price_netto,
+			"price_brutto" => $price_brutto,
+			"photo_small" => $this->photo_small,
+			"symbol" => $this->symbol,
+			"added_time" => $added_time
+		];
+
+		return $item;
+	}
+
+	public function asHistoryItem() {
+		$item = [
+			"id" => $this->id,
+			"slug" => $this->slug,
+			"name" => $this->name,
+			"seen_on" => strtotime("now") 
+		];
+
+		return $item;
+	}
+
+	public static function fromBasketItem($item) {
+		$product = new Product();
+
+		$fields = ["id", "slug", "name", "symbol", "photo_small"];
+		foreach ($fields as $field) {
+			$product->{$field} = $item[$field];
+		}
+
+		$basket = $product->getBasketFields();
+
+		$basket["price_netto"] = $item["price_netto"];
+		$basket["price_brutto"] = $item["price_brutto"];
+		$basket["added_time"] = $item["added_time"];
+
+		$product->setBasketFields($basket);
+
+		return $product;
+	}
 }
 
-class CategoryDB extends DBModel {
+class Category extends DBModel {
 	protected static $table_name = "category";
 	protected static $primary_key = "id";
 	protected static $foreign_fields = [];
+	protected static $aliases = [
+		"slug" => "key_pl",
+		"name" => "name_pl",
+		"desc" => "desc_pl",
+		"creation_date" => "cdate",
+		"parent_id" => "sub"
+	];
 
 	public $id;
 	public $key_pl;
@@ -347,320 +561,113 @@ class CategoryDB extends DBModel {
 	public $visible_pl;
 	public $group;
 	public $cdate;
-}
 
-class Product {
-	public const TABLE = "product";
-
-	public $id;
-	public $slug;
-	public $symbol;
-	public $name;
-	public $description;
-	public $stock;
-	public $vat;
-
-	public $price_normal = [
-		"netto" => null,
-		"brutto" => null
-	];
-
-	public $price_discounted = [
-		"netto" => null,
-		"brutto" => null
-	];
-
-	public $photos = [
-		"small" => null,
-		"medium" => null,
-		"big" => null
-	];
-
-	public $purchase_count;
-	public $view_count;
-	public $view_date;
-	public $creation_date;
-
-	// for basket usage:
-	public $price_netto = null;
-	public $price_brutto = null;
-	public $added_time = null;
-
-	public function test() {
-		$this->id = 13;
-		$this->slug = "kafelek-lazienkowy";
-		$this->symbol = "K4F3LK1";
-		$this->name = "Kafelek łazienkowy";
-		$this->description = "Poczuj się jak w łazience.";
-		$this->stock = 2138;
-		$this->vat = 23;
-		$this->price_normal["netto"] = 200;
-		$this->price_normal["brutto"] = 246;
-		$this->price_discounted["netto"] = 100;
-		$this->price_discounted["brutto"] = 123;
-
-		$this->photos["small"] = "kafelki.jpg";
-		$this->purchase_count = 50;
-		$this->view_count = 3000;
-		$this->view_date = "";
-		$this->creation_date = "";
-	}
-
-	public function getPrice($tax="brutto", $discounted=False) {
-		$prices = $discounted ? 
-					$this->price_discounted :
-					$this->price_normal;
-		$price = $prices[$tax];
-		return $price;
-	}
-
-	public function asBasketItem() {
-		$price_netto = $this->price_netto ?? $this->getPrice("netto");
-		$price_brutto = $this->price_brutto ?? $this->getPrice("brutto");
-		$added_time = $this->added_time ?? strtotime("now");
-
+	public function asHistoryItem() {
 		$item = [
-			"id" => $this->id,
-			"slug" => $this->slug,
 			"name" => $this->name,
-			"price_netto" => $price_netto,
-			"price_brutto" => $price_brutto,
-			"photo" => $this->photos["small"],
-			"symbol" => $this->symbol,
-			"added" => $added_time
+			"id" => $this->id,
+			"parent_id" => $this->parent_id,
+			"level" => $this->level
 		];
 
 		return $item;
 	}
-
-	public static function fromBasketItem($item) {
-		$product = new Product();
-
-		$product->id = $item["id"];
-		$product->slug = $item["slug"];
-		$product->name = $item["name"];
-		$product->price_netto = $item["price_netto"];
-		$product->price_brutto = $item["price_brutto"];
-		$product->photos["small"] = $item["photo"];
-		$product->symbol = $item["symbol"];
-		$product->added_time = $item["added"];
-
-		return $product;
-	}
-
-	public static function fromDatabase($item) {
-		$product = new Product();
-
-		$product->id = $item["id"];
-		$product->slug = $item["slug"];
-		$product->name = $item["name"];
-		$product->photos["small"] = $item["photo_small"];
-		$product->photos["medium"] = $item["photo_medium"];
-		$product->photos["big"] = $item["photo_big"];
-		$product->symbol = $item["symbol"];
-		$product->description = $item["description"];
-		$product->stock = $item["stock"];
-		$product->vat = $item["vat"];
-		$product->price_normal["netto"] = $item["price_normal_netto"];
-		$product->price_normal["brutto"] = $item["price_normal_brutto"];
-		$product->price_discounted["netto"] = $item["price_discounted_netto"];
-		$product->price_discounted["brutto"] = $item["price_discounted_brutto"];
-		$product->purchase_count = $item["purchase_count"];
-		$product->view_count = $item["view_count"];
-		$product->view_date = $item["view_date"];
-		$product->creation_date = $item["creation_date"];
-
-		return $product;
-	}
-
-	public static function getColumns() {
-		return "
-			product.id, product.key_pl AS slug, product.symbol AS symbol, product.name_pl AS name, product.desc_pl AS description, product.stock, product.vat, product.priceAn AS price_normal_netto, product.priceBn AS price_discounted_netto, product.priceAg AS price_normal_brutto, product.priceBg AS price_discounted_brutto, product.fotos AS photo_small, product.fotom AS photo_medium, product.fotob AS photo_big, product.purchase_count, product.view_count, product.view_date, product.cdate AS creation_date
-		";
-	}
-
-	public static function getProducts($database) {
-		$params = [];
-		$table = Product::TABLE;
-		$columns = Product::getColumns();
-		$query = "
-			SELECT $columns FROM $table AS product;
-		";
-
-		$statement = $database->prepare($query);
-		$statement->execute($params);
-		$result = $statement->fetchAll(PDO::FETCH_ASSOC);
-
-		$products = [];
-		foreach ($result as $item) {
-			$products[] = Product::fromDatabase($item);
-		}
-		return $products;
-	}
 }
 
-class Basket {
+class Basket extends SessionModel {
 	private const SHIPMENT = 10;
-	private $basket;
-	private $data;
+	protected $fields = [
+		"netto" => 0,
+		"brutto" => 0,
+		"shipment" => 0,
+		"products" => []
+	];
+	
+	public function init() {
+		$this->computed = [
+			"total" => function() {
+				return $this->brutto + $this->shipment;
+			},
 
-	public $netto;
-	public $brutto;
-	public $shipment;
-	public $products;
-	public $total;
-
-	public function __construct($data) {
-		$this->data = $data;
-		$this->retrieve();
-		if (is_null($this->basket)) {
-			$this->update();
-			$this->retrieve();
-		}
-
-		$this->netto = floatval($this->basket["netto"]);
-		$this->brutto = floatval($this->basket["brutto"]);
-		$this->shipment = floatval($this->basket["shipment"]);
-		$this->products = $this->basket["products"];
-
-		$this->total = $this->brutto + $this->shipment;
-	}
-
-	private function retrieve() {
-		$this->basket = $this->data->session->basket;
-	}
-
-	private function push() {
-		$this->update(
-			$this->netto, $this->brutto, $this->shipment, $this->products
-		);
-	}
-
-	public function update($netto=0, $brutto=0, $shipment=0, $products=[]) {
-		$_SESSION["basket"] = [
-			"netto" => $netto,
-			"brutto" => $brutto,
-			"shipment" => $shipment,
-			"products" => $products
+			"empty" => function() {
+				return count($this->products) === 0;
+			}
 		];
-		$this->netto = $netto;
-		$this->brutto = $brutto;
-		$this->shipment = $shipment;
-		$this->products = $products;
-	}
-
-	public function isEmpty() {
-		return count($this->products) == 0;
 	}
 
 	public function addProduct($product) {
 		$item = $product->asBasketItem();
-		if ($this->isEmpty()) {
+		if ($this->empty) {
 			$this->shipment = Basket::SHIPMENT;
 		}
 		$this->netto += $item["price_netto"];
 		$this->brutto += $item["price_brutto"];
 		$this->products[] = $item;
-
-		$this->push();
 	}
 
 	public function removeProduct($product) {
 		$slug = $product->slug;
-		foreach ($this->products as $i => $product) {
-			if ($product->slug == $slug) {
-				$this->netto -= $product->price_netto;
-				$this->brutto -= $product->price_brutto;
+		foreach ($this->products as $i => $basketProduct) {
+			if ($basketProduct["slug"] == $slug) {
+				$this->netto -= $basketProduct["price_netto"];
+				$this->brutto -= $basketProduct["price_brutto"];
 				unset($this->products[$i]);
 				break;
 			}
 		}
 
-		if ($this->isEmpty()) {
+		if ($this->empty) {
 			$this->shipment = 0;
 		}
-		$this->push();
 	}
 }
 
-class History {
-	private $data;
+class History extends SessionModel {
+	protected $fields = [
+		"clear_date" => "1970-01-01",
+		"viewed_products" => [],
+		"viewed_categories" => []
+	];
 
-	public $viewed_products;
-	public $clear_date;
-
-	public function __construct($data) {
-		$this->data = $data;
-
-		$this->update();
+	public function init() {
 		$today = date('Y-m-d');
 		if ($today !== $this->clear_date) {
 			$this->clearHistory();
 		}
 	}
 
-	public function viewProduct($product) {
-		$now = strtotime("now");
-		$element = [
-			"id" => $product->id,
-			"slug" => $product->slug,
-			"category" => $product->category,
-			"seen" => $now
-		];
-
-		$this->addElement($element);
+	public function addProduct($product) {
+		$element = $product->asHistoryItem();
+		$this->viewed_products[] = $element;
 	}
 
-	private function addElement($element) {
-		$_SESSION["history"]["viewed_products"][] = $element;
-	}
-
-	private function setElements($elements) {
-		$_SESSION["history"]["viewed_products"] = $elements;
-	}
-
-	private function setClearDate($date) {
-		$_SESSION["history"]["clear_date"] = $date;
-	}
-
-	private function reset() {
-		$_SESSION["history"] = [];
-		$_SESSION["history"]["viewed_products"] = [];
-		$_SESSION["history"]["clear_date"] = date('Y-m-d');
-	}
-
-	private function update() {
-		$history = $this->data->session->history;
-		if (is_null($history)) {
-			$this->reset();
-			$this->update();
-			return;
-		}
-
-		$this->viewed_products = $history["viewed_products"]; 
-		$this->clear_date = $history["clear_date"];
+	public function addCategory($category) {
+		$element = $category->asHistoryItem();
+		$this->viewed_categories[] = $element;
 	}
 
 	private function clearHistory() {
 		$month_ago = strtotime("-1 month");
-		$remove_from_start = 0;
-		foreach ($this->viewed_products as $product) {
-			/* binary search would be faster */
-			$seen = intval($product["seen"]);
-			if ($seen <= $month_ago) {
-				$remove_from_start += 1;
-			} else {
-				break;
+		$today = date('Y-m-d');
+
+		$categories = ["viewed_products", "viewed_categories"];
+		foreach ($categories as $category_name) {
+			$category = $this->{$category_name};
+
+			$old_items_count = 0;
+			foreach ($category as $product) { // binary search would be faster
+				$seen = intval($product["seen"]);
+				if ($seen <= $month_ago) {
+					$old_items_count += 1;
+				} else {
+					break;
+				}
+				$viewed = array_slice($category, $old_items_count);
+				$this->{$category_name} = $viewed;
 			}
 		}
 
-		$viewed = array_slice($this->viewed_products, $remove_from_start);
-		$today = date('Y-m-d');
-
-		$this->setElements($viewed);
-		$this->setClearDate($today);
-
-		$this->update();
+		$this->clear_date = $today;
 	}
 }
 ?>

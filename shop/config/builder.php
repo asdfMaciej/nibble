@@ -365,14 +365,22 @@ class Template implements TemplateInterface {
 		}
 	}
 
+	protected function showVariable($name) {
+
+	}
 	public function generate($data) {
+		if ($this->template_path === "") {
+			return;
+		}
+		$content = file_get_contents($this->template_path);
+		$content = "?>" . $content;// . "<?php";
+		$content = preg_replace('~{{ *([\w->\[\]"\']+) *}}~', '<?php echo($$1); ?>', $content);
+
 		extract($this->nest_extract);
 		$this->nest_extract = $data;
 		extract($this->nest_extract);
 
-		if ($this->template_path != "") {
-			include $this->template_path;
-		}
+		eval($content);
 	}
 
 	protected function nest($filename, $data) { // input there should be correct

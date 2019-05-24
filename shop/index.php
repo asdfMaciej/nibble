@@ -18,7 +18,8 @@ $pages = [
 		"*" => "pages/class_index.php"
 	],
 	"product" => [
-		"*" => "pages/class_index.php"
+		"index" => "pages/product.php",
+		"*" => "pages/product.php"
 	]
 ];
 

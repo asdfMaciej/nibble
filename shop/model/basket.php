@@ -217,13 +217,21 @@ class DBModel extends Model {
 			/*
 				in case table.alias was provided at start,
 				it finds the matching column
+
+				table name is assumed to be ModelName 
 			*/
 			$parts = explode('.', $key);
 			$key_table = strtolower($parts[0]);
 			$key_column = $parts[1];
 			foreach ($used_models as $model) {
+				$class = new ReflectionClass($model);
+				$class_name = strtolower($class->getShortName());
 				$table_name = strtolower($model::getTableName());
-				if ($table_name != $key_table) {
+				if ($key_table == $table_name) {
+					// do nothing
+				} elseif ($key_table == $class_name) {
+					$key_table = $table_name;
+				} else {
 					continue;
 				}
 
@@ -254,10 +262,7 @@ class DBModel extends Model {
 			$conditions[] = $condition;
 		}
 
-		$query = " WHERE " . implode(" AND ", $conditions);
-		if (count($where) == 0) {
-			$query = "";
-		}
+		$query = implode(" AND ", $conditions);
 		$returned = [
 			"query" => $query,
 			"params" => $params
@@ -271,12 +276,16 @@ class DBModel extends Model {
 		$fields = $this->addJoinFields($fields, $this);
 
 		$used_models = [$this];
-
-		$query_join = "";
 		$foreign = $this->getForeignFields();
+
 		foreach ($foreign as $join_element) {
 			$model = $join_element["model"];
 			$used_models[] = $model;
+		}
+
+		$query_join = "";		
+		foreach ($foreign as $join_element) {
+			$model = $join_element["model"];
 
 			$foreign_table = $model::getTableName();
 			$foreign_primary = $model::getPrimaryKey();
@@ -285,9 +294,17 @@ class DBModel extends Model {
 			$method = $join_element["method"];
 			$key = $join_element["key"];
 
+			$on_left = "$foreign_table.$foreign_primary";
+			if (is_array($key)) {
+				$on_left = $key[0];
+				$on_right = $key[1];
+			} else {
+				$on_right = $key;
+			}
+
 			$join = "
 			$method JOIN $foreign_table
-				ON $key = $foreign_table.$foreign_primary
+				ON $on_left = $on_right
 			";
 			$query_join .= $join;
 		}
@@ -303,8 +320,11 @@ class DBModel extends Model {
 		SELECT $fields 
 		FROM $main_table
 		$query_join
-		$query_where
 		";
+
+		if ($query_where) {
+			$query .= " WHERE $query_where";
+		}
 
 		$returned = [
 			"query" => $query,
@@ -322,7 +342,7 @@ class DBModel extends Model {
 
 		$statement = $this->database->prepare($query);
 		$success = $statement->execute($params);
-		var_dump($query);
+
 		if (!$success) {
 			return False;
 		}
@@ -381,6 +401,8 @@ class DBModel extends Model {
 	}
 
 }
+
+// framework above - todo: move to a different file
 
 class ProductConnection extends DBModel {
 	protected static $table_name = "product_connection";
@@ -567,11 +589,33 @@ class Category extends DBModel {
 			"name" => $this->name,
 			"id" => $this->id,
 			"parent_id" => $this->parent_id,
-			"level" => $this->level
+			"level" => $this->level,
+			"seen_on" => strtotime("now")
 		];
 
 		return $item;
 	}
+}
+
+class CategoryProducts extends Category {
+	protected static $foreign_fields = [
+		[
+			"key" => [
+				"product_connection.cid",
+				"category.id"
+			],
+			"model" => ProductConnection::class,
+			"method" => "left"
+		],
+		[
+			"key" => [
+				"product_connection.pid",
+				"product.id"
+			], 
+			"model" => Product::class,
+			"method" => "inner"
+		]
+	];
 }
 
 class Basket extends SessionModel {
@@ -656,7 +700,7 @@ class History extends SessionModel {
 
 			$old_items_count = 0;
 			foreach ($category as $product) { // binary search would be faster
-				$seen = intval($product["seen"]);
+				$seen = intval($product["seen_on"]);
 				if ($seen <= $month_ago) {
 					$old_items_count += 1;
 				} else {

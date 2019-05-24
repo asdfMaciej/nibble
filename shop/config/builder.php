@@ -108,6 +108,8 @@ class DataFromPath {
 			}
 		}
 
+		$value = urldecode($value);
+
 		return $value;
 	}
 }

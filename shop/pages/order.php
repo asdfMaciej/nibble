@@ -4,8 +4,7 @@ use \PDO;
 use \Model\Order;
 use \Model\OrderProduct;
 
-include_once __DIR__ . "/../env/config.php";
-include_once ROOT_PATH . "/config/builder.php";
+include_once ROOT_PATH . "/application/app.php";
 
 class Index extends \ShopBuilder {
 	private $orders;

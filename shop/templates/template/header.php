@@ -1,6 +1,6 @@
 <div id="header">
-	<a href="/shop/category">Kategorie</a>
-	<a href="/shop/product/lodowka">Lodówka</a>
+	<a href="/shop/category">Kategorie i produkty</a>
+	<a href="/shop/order">Zamówienia</a>
 	<a href="/shop/basket">Koszyk</a>
 </div>
 

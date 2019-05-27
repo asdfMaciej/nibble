@@ -15,7 +15,7 @@ $pages = [
 		"*" => "pages/category.php"
 	],
 	"order" => [
-		"*" => "pages/class_index.php"
+		"*" => "pages/order.php"
 	],
 	"product" => [
 		"index" => "pages/product.php",

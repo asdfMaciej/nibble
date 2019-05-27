@@ -10,10 +10,15 @@
 		<b>Netto:</b>{{product['price_netto']}}<br>
 		<b>Brutto:</b>{{product['price_brutto']}}<br>
 		<b>Czas dodania:</b>{{product['added_time']}}
-		<form action="./basket" method="post">
+		<form action="/shop/basket" method="post">
 			<input type="hidden" name="action" value="remove_item">
 			<input type="hidden" name="slug" value="{{product['slug']}}">
 			<input type="submit" value="Usuń z koszyka">
 		</form>
 	</div>
 <?php endforeach ?>
+
+<form action="/shop/order" method="post">
+	<input type="hidden" name="action" value="new_order">
+	<input type="submit" value="Złóż zamówienie">
+</form>

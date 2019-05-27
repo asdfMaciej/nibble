@@ -19,7 +19,6 @@ class Index extends \ShopBuilder {
 		$this->getProducts($slug);
 		$this->getCategory($slug);
 		$this->getChildCategories($slug);
-		//$this->getChildCategories($category_slug);
 	}
 
 	public function getCategorySlug() {

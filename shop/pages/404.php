@@ -1,6 +1,7 @@
 <?php
 namespace Web\Pages;
 use \PDO;
+use \Model\Category;
 
 include_once __DIR__ . "/../env/config.php";
 include_once ROOT_PATH . "/config/builder.php";
@@ -14,8 +15,18 @@ class Index extends \ShopBuilder {
 	public function content() {
 		$this->response->addTemplate("codes/404.php", []);
 
+		$where = [];
+		$c = new Category($this->database);
 
-		\Model\Product::getProducts($this->database);
+		$slug = "zaglada";
+		$q= $c->select("children.*")
+			->from($c, "category")
+			->leftJoin($c, "children", "children.sub = category.id")
+			->where("category.key_pl = :slug")
+			->setParameter(":slug", $slug)
+			->execute($this->database)
+			->getAll();
+		var_dump($q);
 	}
 }
 

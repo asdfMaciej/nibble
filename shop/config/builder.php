@@ -186,7 +186,7 @@ class PageMetadata {
 class WebBuilderConfig {
 	public $autorun = True;
 	public $action_key = "action";
-	public $action_method = "get";
+	public $action_method = "post";
 }
 
 class PageSnackbar {
@@ -242,16 +242,8 @@ class WebBuilder {
 
 	public function _init() {
 		$this->metadata->addStylesheet("style.css");
-		$this->handleActions();
 
 		$this->response->addTemplate($this->template_path->head, $this->metadata->getMetadata());
-
-		if ($this->snackbar->getMessage()) {
-			$this->response->addTemplate($this->template_path->header_msg, [
-				"message" => $this->snackbar->getMessage(),
-				"code" => $this->snackbar->getCode(),
-			]);
-		}
 
 		$this->response->addTemplate($this->template_path->header, []);
 		return True;
@@ -263,11 +255,19 @@ class WebBuilder {
 	public function run() {
 		$this->_init();
 		$this->init();
+		$this->handleActions();
 		$this->content();
 		$this->render();
 	}
 
 	public function render() {
+		if ($this->snackbar->getMessage()) {
+			$this->response->addTemplate($this->template_path->header_msg, [
+				"message" => $this->snackbar->getMessage(),
+				"code" => $this->snackbar->getCode(),
+			]);
+		}
+
 		$this->response->addTemplate($this->template_path->footer);
 		$this->response->addTemplate($this->template_path->foot);
 		$this->response->generate();

@@ -34,7 +34,6 @@ class Model {
 	}
 
 	public function init() {} // virtual
-	public function save() {} // virtual
 
 	public static function getFields($model=null) {
 		if (is_null($model)) {
@@ -114,6 +113,122 @@ class SessionModel extends Model {
 	}
 }
 
+class QueryBuilder {
+	private $fields = "";
+	private $table = "";
+	private $where = "";
+	private $order = "";
+	private $parameters = [];
+	private $joins = [];
+
+	private $statement;
+	private $database;
+
+	public function __construct() {}
+	public function select($fields) {
+		if (!is_array($fields)) {
+			$fields = [$fields];
+		}
+
+		$this->fields = implode(", ", $fields);
+		return $this;
+	}
+
+	public function from($model, $alias="") {
+		$table_name = $this->getModelTable($model);
+		$this->table = "$table_name AS $alias";
+		return $this;
+	}
+
+	public function where($condition) {
+		if ($condition == "") {
+			$this->where = "";
+		} else {
+			$this->where = "WHERE " . $condition;
+		}
+		return $this;
+	}
+
+	public function orderBy($column, $direction="asc") {
+		$directions = ["asc", "desc", "ascending", "descending", ""];
+		$valid = in_array(strtolower($direction), $directions);
+		if (!$valid) {
+			throw new Exception("Invalid direction - $direction");
+		}
+
+		$this->order = "";
+		if ($column) {
+			$this->order = "ORDER BY $column $direction";
+		}
+		return $this;
+	}
+
+	public function setParameters($params) {
+		$this->parameters = $params;
+		return $this;
+	}
+
+	public function addParameters($params) {
+		foreach ($params as $param => $value) {
+			$this->parameters[$param] = $value;
+		}
+		return $this;
+	}
+
+	public function setParameter($param, $value) {
+		$this->parameters[$param] = $value;
+		return $this;
+	}
+
+	public function leftJoin($model, $alias, $on) {
+		return $this->join("left", $model, $alias, $on);
+	}
+	public function rightJoin($model, $alias, $on) {
+		return $this->join("right", $model, $alias, $on);
+	}
+	public function innerJoin($model, $alias, $on) {
+		return $this->join("inner", $model, $alias, $on);
+	}
+
+	public function execute($database) {
+		$this->database = $database;
+		$query = $this->getQuery();
+		$this->statement = $database->prepare($query);
+		$this->statement->execute($this->parameters);
+		return $this;
+	}
+
+	public function getAll() {
+		return $this->statement->fetchAll(PDO::FETCH_ASSOC);
+	}
+
+	public function getRow() {
+		return $this->statement->fetch(PDO::FETCH_ASSOC);
+	}
+
+	public function getQuery() {
+		$q = "SELECT $this->fields\n";
+		$q .= "FROM $this->table\n";
+
+		$joins = implode("\n", $this->joins);
+		$q .= "$joins\n";
+		$q .= "$this->where\n";
+		$q .= "$this->order";
+
+		return $q;
+	}
+
+	private function join($method, $model, $alias, $on) {
+		$table_name = $this->getModelTable($model);
+		$query = "$method JOIN $table_name AS $alias\nON $on";
+		$this->joins[] = $query;
+		return $this;
+	}
+	private function getModelTable($model) {
+		return $model::getTableName();
+	}
+}
+
 class DBModel extends Model {
 	/*
 		Parts of code are based on: 
@@ -124,16 +239,11 @@ class DBModel extends Model {
 	protected static $primary_key;
 	protected static $aliases = [];
 
-	protected $database;
-
-	public function __construct($database) {
-		$this->database = $database;
-	}
-
+	public function __construct() {}
 
 	public function init() {} // virtual
 
-	public function save() {
+	public function save($database) {
 		$key_value_pairs = [];
 		$parameters = [];
 		$primary = $this->getPrimaryKey();
@@ -168,209 +278,30 @@ class DBModel extends Model {
 			$query = "INSERT INTO `$table_name` SET $set_clause";
 		}
 
-		$statement = $this->database->prepare($query);
+		$statement = $database->prepare($query);
 		$success = $statement->execute($parameters);
 		
 		return $success;
 	}
 
-	private function addJoinFields($addFields, $model) {
-		$table = $model::getTableName();
-		$primary = $model::getPrimaryKey();
-		$fields = $model::getFields();
-
-		foreach ($fields as $field) {
-			$alias = $table."_".$field;
-			$addFields[] = "$table.$field AS $alias";
-		}
-
-		return $addFields;
+	public static function select($fields) {
+		$query_builder = new QueryBuilder();
+		return $query_builder->select($fields);
 	}
 
-	private function getWhere($where, $used_models) {
-		$conditions = [];
-		$params = [];
-		foreach ($where as $key => $value) {
-			/*
-				if only column provided: it finds the
-					first table with such column or alias
-			*/
-			if (strpos($key, '.') === false) {
-				foreach ($used_models as $model) { // calling body is 1st
-					$fields = $model::getFields();
-					$key_check = $key . "";
-					if (array_key_exists($key, $model::$aliases)) {
-						$key_check = $model::$aliases[$key];
-					}
-
-					if (in_array($key_check, $fields)) {
-						$key = $model::getTableName() . "." . $key_check;
-						break;
-					}
-				}
-			}
-
-			if (strpos($key, '.') === false) {
-				throw new Exception("Unable to find key: $key");
-			}
-
-			/*
-				in case table.alias was provided at start,
-				it finds the matching column
-
-				table name is assumed to be ModelName 
-			*/
-			$parts = explode('.', $key);
-			$key_table = strtolower($parts[0]);
-			$key_column = $parts[1];
-			foreach ($used_models as $model) {
-				$class = new ReflectionClass($model);
-				$class_name = strtolower($class->getShortName());
-				$table_name = strtolower($model::getTableName());
-				if ($key_table == $table_name) {
-					// do nothing
-				} elseif ($key_table == $class_name) {
-					$key_table = $table_name;
-				} else {
-					continue;
-				}
-
-				if (array_key_exists($key_column, $model::$aliases)) {
-					$key_column = $model::$aliases[$key_column];
-					break;
-				}
-			}
-
-			$key = "$key_table.$key_column";
-
-			if (is_array($value)) {
-				$condition = "$key IN (";
-				$potential = [];
-				foreach ($value as $n => $v) {
-					$param = ":$key" . "__$n";
-					$param = str_replace('.', '_', $param);
-					$potential[] = $param;
-					$params[$param] = $v;
-				}
-				$condition .= implode(", ", $potential) . ")";
-			} else {
-				$param = ":$key";
-				$param = str_replace('.', '_', $param);
-				$condition = "$key = $param";
-				$params[$param] = $value;
-			}
-			$conditions[] = $condition;
-		}
-
-		$query = implode(" AND ", $conditions);
-		$returned = [
-			"query" => $query,
-			"params" => $params
-		];
-		return $returned;
-	}
-
-	private function getQuery($where=[]) {
-		$main_table = $this->getTableName();
-		$fields = [];
-		$fields = $this->addJoinFields($fields, $this);
-
-		$used_models = [$this];
-		$foreign = $this->getForeignFields();
-
-		foreach ($foreign as $join_element) {
-			$model = $join_element["model"];
-			$used_models[] = $model;
-		}
-
-		$query_join = "";		
-		foreach ($foreign as $join_element) {
-			$model = $join_element["model"];
-
-			$foreign_table = $model::getTableName();
-			$foreign_primary = $model::getPrimaryKey();
-			$fields = $this->addJoinFields($fields, $model);
-
-			$method = $join_element["method"];
-			$key = $join_element["key"];
-
-			$on_left = "$foreign_table.$foreign_primary";
-			if (is_array($key)) {
-				$on_left = $key[0];
-				$on_right = $key[1];
-			} else {
-				$on_right = $key;
-			}
-
-			$join = "
-			$method JOIN $foreign_table
-				ON $on_left = $on_right
-			";
-			$query_join .= $join;
-		}
-
-		$fields = implode(", ", $fields);
-		$params = [];
-
-		$where = $this->getWhere($where, $used_models);
-		$query_where = $where["query"];
-		$params = array_merge($params, $where["params"]);
-
-		$query = "
-		SELECT $fields 
-		FROM $main_table
-		$query_join
-		";
-
-		if ($query_where) {
-			$query .= " WHERE $query_where";
-		}
-
-		$returned = [
-			"query" => $query,
-			"params" => $params,
-			"models" => $used_models
-		];
-		return $returned;
-	}
-
-	public function get($where=[]) {
-		$q = $this->getQuery($where);
-		$query = $q["query"];
-		$params = $q["params"];
-		$models = $q["models"];
-
-		$statement = $this->database->prepare($query);
-		$success = $statement->execute($params);
-
-		if (!$success) {
-			return False;
-		}
-
-		$rows = $statement->fetchAll(PDO::FETCH_ASSOC);
-
-		$result = [];
-		foreach ($rows as $row) {
-			foreach ($models as $model) {
-				$result_row[$model::getTableName()] = $model::fromArray($this->database, $row);
-			}
-			$result[] = $result_row;
-		}
-		return $result;	
-	}
-
-	public static function fromArray($database, $array) {
+	public static function fromArray($array, $prefix="") {
 		$model = get_called_class(); // it will be inherited
 		$class = new ReflectionClass($model); // hence we need the child class
 
-		$new_class = $class->newInstance($database);
+		$new_class = $class->newInstance();
 		$public_fields = $class->getProperties(ReflectionProperty::IS_PUBLIC);
 
 		$table = static::$table_name;
 		$alias_fields = [];
+
 		foreach ($public_fields as $property) {
 			$property_name = $property->getName();
-			$array_key = $table . "_" . $property_name;
+			$array_key = $prefix . $property_name;
 			$property_exists = isset($array[$array_key]);
 
 			if ($property_exists) {
@@ -406,17 +337,6 @@ class DBModel extends Model {
 
 class ProductConnection extends DBModel {
 	protected static $table_name = "product_connection";
-	protected static $foreign_fields = [
-		[
-			"key" => "product_connection.pid", 
-			"model" => Product::class,
-			"method" => "inner"
-		], [
-			"key" => "product_connection.cid",
-			"model" => Category::class,
-			"method" => "inner"
-		]
-	];
 	protected static $primary_key = "id";
 
 	public $sort;
@@ -428,7 +348,6 @@ class ProductConnection extends DBModel {
 class Product extends DBModel {
 	protected static $table_name = "product";
 	protected static $primary_key = "id";
-	protected static $foreign_fields = [];
 
 	protected static $aliases = [
 		"slug" => "key_pl",
@@ -511,6 +430,21 @@ class Product extends DBModel {
 			$this->price_normal_brutto;
 	}
 
+	public static function getProduct($db, $slug) {
+		$row = static::select("product.*")
+					->from(static::class, "product")
+					->where("product.key_pl = :slug")
+					->setParameter(":slug", $slug)
+					->execute($db)
+					->getRow();
+		$product = static::fromArray($row);
+		return $product;
+	}
+
+	public function isEmpty() {
+		return is_null($this->id);
+	}
+
 	public function asBasketItem() {
 		$price_netto = $this->basket_fields["netto"] ?? $this->getPrice("netto");
 		$price_brutto = $this->basket_fields["brutto"] ?? $this->getPrice("brutto");
@@ -564,7 +498,6 @@ class Product extends DBModel {
 class Category extends DBModel {
 	protected static $table_name = "category";
 	protected static $primary_key = "id";
-	protected static $foreign_fields = [];
 	protected static $aliases = [
 		"slug" => "key_pl",
 		"name" => "name_pl",
@@ -595,28 +528,64 @@ class Category extends DBModel {
 
 		return $item;
 	}
+
+	public function isEmpty() {
+		return is_null($this->id);
+	}
+
+	public static function getProducts($db, $slug) {
+		$rows = static::select("product.*")
+					->from(static::class, "category")
+					->leftJoin(ProductConnection::class, "connection",
+								"category.id = connection.cid")
+					->innerJoin(Product::class, "product",
+								"product.id = connection.pid")
+					->where("category.key_pl = :slug")
+					->setParameter(":slug", $slug)
+					->execute($db)
+					->getAll();
+		$products = [];
+		foreach ($rows as $product) {
+			$products[] = Product::fromArray($product);
+		}
+
+		return $products;
+	}
+
+	public static function getCategory($db, $slug) {
+		$row = static::select("category.*")
+					->from(static::class, "category")
+					->where("category.key_pl = :slug")
+					->setParameter(":slug", $slug)
+					->execute($db)
+					->getRow();
+		return static::fromArray($row);
+	}
+
+	public static function getChildCategories($db, $slug="") {
+		$rows = static::select("child.*");
+									
+		if ($slug !== "") {
+			$rows->from(static::class, "category")
+				->leftJoin(static::class, "child", "child.sub = category.id")
+				->where("category.key_pl = :slug")
+				->setParameter(":slug", $slug);
+		} else {
+			$rows->from(static::class, "child")
+				->where("child.sub = 0");
+		}
+
+		$rows = $rows->execute($db)->getAll();
+
+		$categories = [];
+		foreach ($rows as $category) {
+			$categories[] = static::fromArray($category);
+		}
+
+		return $categories;
+	}
 }
 
-class CategoryProducts extends Category {
-	protected static $foreign_fields = [
-		[
-			"key" => [
-				"product_connection.cid",
-				"category.id"
-			],
-			"model" => ProductConnection::class,
-			"method" => "left"
-		],
-		[
-			"key" => [
-				"product_connection.pid",
-				"product.id"
-			], 
-			"model" => Product::class,
-			"method" => "inner"
-		]
-	];
-}
 
 class Basket extends SessionModel {
 	private const SHIPMENT = 10;
@@ -714,4 +683,5 @@ class History extends SessionModel {
 		$this->clear_date = $today;
 	}
 }
+
 ?>

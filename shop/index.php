@@ -8,7 +8,7 @@ $pages = [
 	"/" => "pages/index.php",
 	"404" => "pages/404.php",
 	"basket" => [
-		"index" => "pages/admin.php",
+		"index" => "pages/basket.php",
 	],
 	"category" => [
 		"index" => "pages/category.php",

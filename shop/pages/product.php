@@ -11,6 +11,10 @@ class Index extends \ShopBuilder {
 
 	public function init() {
 		$this->metadata->setTitle("Sklep - produkt");
+		$this->addAction("add_basket", "onAddBasket");
+
+		$product_slug = $this->getProductSlug();
+		$this->getProduct($product_slug);
 	}
 
 	public function getProductSlug() {
@@ -18,22 +22,18 @@ class Index extends \ShopBuilder {
 		return $product !== "" ? $product : 0;
 	}
 
-	public function getProduct($product_slug) {
-		$where = ["slug" => $product_slug];
+	public function getProduct($slug) {
+		$this->product = Product::getProduct($this->database, $slug);
+	}
 
-		$product = new Product($this->database);
-		$result = $product->get($where);
-		if ($result) {
-			$this->product = $result[0]["product"];
-		} else {
-			$this->product = [];
-		}
+	public function onAddBasket() {
+		$this->basket->addProduct($this->product);
+		$this->snackbar->setMessage("Dodano do koszyka");
+		$this->snackbar->setCode(200);
 	}
 
 	public function content() {
 		$product_slug = $this->getProductSlug();
-		$this->getProduct($product_slug);
-
 		$product_slug = htmlspecialchars($product_slug, ENT_QUOTES, 'UTF-8', false);
 
 		$this->response->addTemplate("product.php", [

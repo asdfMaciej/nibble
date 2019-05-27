@@ -1,13 +1,15 @@
-<?php if (empty($category)): ?>
-	Kategoria "{{category_slug}}" nie ma żadnych produktów. 
-<?php else: ?>
-	Nazwa kategorii: {{category->name}}<br>
+<?php if (!$category->isEmpty()): ?>
+	Obecna kategoria: {{category->name}}<br>
 	Produkty:<br>
 	<?php foreach ($products as $product): ?>
 	<div>
-		<b>{{product->slug}}</b><br>
-		{{product->name}}<br>
-		<pre>{{product->desc}}</pre>
+		<a href="/shop/product/{{product->slug}}">{{product->name}}, {{product->price_normal_brutto}} zł</a>
 	</div>
 	<?php endforeach ?>
 <?php endif ?>
+
+<?php foreach ($child_categories as $category): ?>
+<div>
+	<b>Kategoria:</b> <a href="/shop/category/{{category->slug}}">{{category->name_pl}}</a>
+</div>
+<?php endforeach ?>

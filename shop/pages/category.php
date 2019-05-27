@@ -2,48 +2,52 @@
 namespace Web\Pages;
 use \PDO;
 use \Model\CategoryProducts;
+use \Model\Category;
+
 
 include_once __DIR__ . "/../env/config.php";
 include_once ROOT_PATH . "/config/builder.php";
 
 class Index extends \ShopBuilder {
-	private $category;
+	private $category = [];
 	private $products;
+	private $child_categories;
 
 	public function init() {
 		$this->metadata->setTitle("Sklep - produkty w kategorii");
+		$slug = $this->getCategorySlug();
+		$this->getProducts($slug);
+		$this->getCategory($slug);
+		$this->getChildCategories($slug);
+		//$this->getChildCategories($category_slug);
 	}
 
-	public function getCategorySlug() {  // [url]/category/123 -> returns 123
+	public function getCategorySlug() {
 		$category = $this->data->path->category;
-		$category = $category !== "" ? $category : 0;
+		$category = $category !== "" ? $category : "";
 		return $category;
 	}
 
-	public function getCategoryAndProducts($category_slug) {
-		$where = ["slug" => $category_slug];
+	public function getProducts($slug) {
+		$this->products = Category::getProducts($this->database, $slug);
+	}
 
-		$category_products = new CategoryProducts($this->database);
-		$list = $category_products->get($where);
+	public function getCategory($slug) {
+		$this->category = Category::getCategory($this->database, $slug);
+	}
 
-		$category = $list[0]["category"] ?? [];
-		$products = [];
-		foreach ($list as $group) {
-			$products[] = $group["product"];
-		}
-
-		$this->category = $category;
-		$this->products = $products;
+	public function getChildCategories($slug) {
+		$this->child_categories = Category::getChildCategories($this->database, $slug);
 	}
 
 	public function content() {
 		$category_slug = $this->getCategorySlug();
-		$this->getCategoryAndProducts($category_slug);
 		$category_slug = htmlspecialchars($category_slug, ENT_QUOTES, 'UTF-8', false);
 
 		$this->response->addTemplate("category.php", [
 			"category" => $this->category,
 			"products" => $this->products,
+			"child_categories" => $this->child_categories,
 			"category_slug" => $category_slug
 		]);
 

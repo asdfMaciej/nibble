@@ -1,14 +1,11 @@
 <?php
 namespace Web\Pages;
-use \PDO;
 use \Model\Product;
-
-include_once ROOT_PATH . "/application/app.php";
 
 class Index extends \ShopBuilder {
 	private $product;
 
-	public function init() {
+	protected function init() {
 		$this->metadata->setTitle("Sklep - produkt");
 		$this->addAction("add_basket", "onAddBasket");
 
@@ -16,28 +13,25 @@ class Index extends \ShopBuilder {
 		$this->getProduct($product_slug);
 	}
 
-	public function getProductSlug() {
+	protected function getProductSlug() {
 		$product = $this->data->path->product;
 		return $product !== "" ? $product : 0;
 	}
 
-	public function getProduct($slug) {
+	protected function getProduct($slug) {
 		$this->product = Product::getProduct($this->database, $slug);
 	}
 
-	public function onAddBasket() {
+	protected function onAddBasket() {
 		$this->basket->addProduct($this->product);
 		$this->snackbar->setMessage("Dodano do koszyka");
 		$this->snackbar->setCode(200);
 	}
 
-	public function content() {
-		$product_slug = $this->getProductSlug();
-		$product_slug = htmlspecialchars($product_slug, ENT_QUOTES, 'UTF-8', false);
-
+	protected function content() {
 		$this->response->addTemplate("product.php", [
 			"product" => $this->product,
-			"product_slug" => $product_slug
+			"product_slug" => $this->getProductSlug()
 		]);
 
 		if ($this->product) {

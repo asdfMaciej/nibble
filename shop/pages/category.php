@@ -4,15 +4,12 @@ use \PDO;
 use \Model\CategoryProducts;
 use \Model\Category;
 
-
-include_once ROOT_PATH . "/application/app.php";
-
 class Index extends \ShopBuilder {
 	private $category = [];
 	private $products;
 	private $child_categories;
 
-	public function init() {
+	protected function init() {
 		$this->metadata->setTitle("Sklep - produkty w kategorii");
 		$slug = $this->getCategorySlug();
 		$this->getProducts($slug);
@@ -20,33 +17,30 @@ class Index extends \ShopBuilder {
 		$this->getChildCategories($slug);
 	}
 
-	public function getCategorySlug() {
+	protected function getCategorySlug() {
 		$category = $this->data->path->category;
 		$category = $category !== "" ? $category : "";
 		return $category;
 	}
 
-	public function getProducts($slug) {
+	protected function getProducts($slug) {
 		$this->products = Category::getProducts($this->database, $slug);
 	}
 
-	public function getCategory($slug) {
+	protected function getCategory($slug) {
 		$this->category = Category::getCategory($this->database, $slug);
 	}
 
-	public function getChildCategories($slug) {
+	protected function getChildCategories($slug) {
 		$this->child_categories = Category::getChildCategories($this->database, $slug);
 	}
 
-	public function content() {
-		$category_slug = $this->getCategorySlug();
-		$category_slug = htmlspecialchars($category_slug, ENT_QUOTES, 'UTF-8', false);
-
+	protected function content() {
 		$this->response->addTemplate("category.php", [
 			"category" => $this->category,
 			"products" => $this->products,
 			"child_categories" => $this->child_categories,
-			"category_slug" => $category_slug
+			"category_slug" => $this->getCategorySlug()
 		]);
 
 		if ($this->category) {

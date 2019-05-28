@@ -1,5 +1,7 @@
 <?php
 include_once __DIR__ . "/env/config.php";
+include_once ROOT_PATH . "/application/app.php";
+
 $uri = explode('?', $_SERVER['REQUEST_URI'], 2);
 $path = $uri[0];
 

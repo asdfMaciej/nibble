@@ -1,20 +1,17 @@
 <?php
 namespace Web\Pages;
-use \PDO;
 use \Model\Order;
 use \Model\OrderProduct;
-
-include_once ROOT_PATH . "/application/app.php";
 
 class Index extends \ShopBuilder {
 	private $orders;
 
-	public function init() {
+	protected function init() {
 		$this->metadata->setTitle("Sklep - koszyk");
 		$this->addAction("new_order", "onNewOrder");
 	}
 
-	public function content() {
+	protected function content() {
 		$order_id = $this->data->path->order;
 		if ($order_id === "") {
 			$this->contentList();
@@ -23,14 +20,14 @@ class Index extends \ShopBuilder {
 		}
 	}
 
-	public function contentList() {
+	protected function contentList() {
 		$this->orders = Order::getOrders($this->database);
 		$this->response->addTemplate("orders_list.php", [
 			"orders" => $this->orders
 		]);
 	}
 
-	public function contentOrder($order_id) {
+	protected function contentOrder($order_id) {
 		$order = Order::getOrder($this->database, $order_id);
 		$products = Order::getProducts($this->database, $order_id);
 		$this->response->addTemplate("order.php", [
@@ -39,7 +36,7 @@ class Index extends \ShopBuilder {
 		]);
 	}
 
-	public function onNewOrder() {
+	protected function onNewOrder() {
 		if ($this->basket->empty) {
 			$this->snackbar->setMessage("Koszyk nie może być pusty!");
 			$this->snackbar->setCode(400);

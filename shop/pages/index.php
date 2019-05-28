@@ -1,17 +1,12 @@
 <?php
 namespace Web\Pages;
-use Boilerplate\User;
-use \PDO;
-include_once ROOT_PATH . "/application/app.php";
 
 class Index extends \WebBuilder {
-	public function init() {
+	protected function init() {
 		$this->metadata->setTitle("Index");
 	}
 
-	public function content() {
-		
-	}
+	protected function content() {}
 }
 
 new Index();

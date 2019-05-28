@@ -20,6 +20,7 @@ class Index extends \ShopBuilder {
 		$removed = new Product($this->database);
 		$removed->slug = $this->data->post->slug;
 		$this->basket->removeProduct($removed);
+
 		$this->snackbar->setMessage("Usunięto z koszyka.");
 		$this->snackbar->setCode(200);
 	}

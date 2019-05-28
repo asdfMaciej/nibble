@@ -29,12 +29,12 @@ Don't override \_\_construct() when building a page. Extend class behaviour in a
 
 Run() is called by default on destroy. You can disable this by setting **builder->config->autorun = False**. It performs the following:
 
-**init()** [virtual]    
+**init()** [override it in a page]    
 -> handleActions() [internal]    
--> **header(metadata)**    
--> **showSnackbar(message, code)** [optional virtual]    
--> **content()**    
--> **footer()**    
+-> **header(metadata)** [override it in a class extension]    
+-> **showSnackbar(message, code)** [override it in a class extension]    
+-> **content()** [override it in a page]    
+-> **footer()** [override it in a class extension]    
 -> render() [internal]
 
 By default actions are dispatched based on **POST "action" value**, executing page functions. You can change it in **builder->config**.

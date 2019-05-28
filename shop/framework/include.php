@@ -1,7 +1,7 @@
 <?php
 $required_constants = [
-	"ROOT_PATH", "PATH_PREFIX",
-	"DB_HOST", "DB_USERNAME", "DB_PASSWORD", "DB_DATABASE"
+	"ROOT_PATH", "PATH_PREFIX", 
+	"DB_HOST", "DB_USERNAME", "DB_PASSWORD", "DB_DATABASE", "SESSION_NAME"
 ];
 
 foreach ($required_constants as $constant) {

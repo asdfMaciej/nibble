@@ -54,7 +54,6 @@ class Model {
 	public function setValue($key, $value) {
 		$this->{$key} = $value;
 	}
-
 }
 
 class SessionModel extends Model {
@@ -314,6 +313,56 @@ class DBModel extends Model {
 		return $new_class;
 	}
 
+	private static function whereQuery($table_alias, $match) {
+		$aliases = static::getAliases();
+		$params = [];
+		$where_q = [];
+		foreach ($match as $field => $value) {
+			$param = ":$field";
+			$params[$param] = $value;
+
+			if (array_key_exists($field, $aliases)) {
+				$field = $aliases[$field];
+			}			
+			$where_q[] = "$table_alias.$field = $param";
+		}
+		$query = implode(" AND ", $where_q);
+		return ["query" => $query, "parameters" => $params];
+	}
+
+	private static function getItemsQuery($match) {
+		$table_alias = "t";
+
+		$q = static::whereQuery($table_alias, $match);
+		$where_query = $q["query"];
+		$where_params = $q["parameters"];
+
+		$row = static::select("$table_alias.*")
+					->from(static::class, $table_alias)
+					->where($where_query)
+					->setParameters($where_params);
+		return $row;
+	}
+
+	public static function getSingleItem($db, $match=[]) {
+		$row = static::getItemsQuery($match)
+					->execute($db)
+					->getRow();
+		return static::fromArray($row);
+	}
+
+	public static function getItems($db, $match=[]) {
+		$rows = static::getItemsQuery($match)
+					->execute($db)
+					->getAll();
+
+		$objects = [];
+		foreach ($rows as $row) { // faster than array_map
+			$objects[] = static::fromArray($row);
+		}
+		return $objects;
+	}
+
 	public static function getTableName() {
 		return static::$table_name;
 	}
@@ -330,5 +379,8 @@ class DBModel extends Model {
 		return static::$foreign_fields;
 	}
 
+	public static function getAliases() {
+		return static::$aliases;
+	}
 }
 ?>

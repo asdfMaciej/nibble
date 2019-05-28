@@ -6,7 +6,9 @@ class Index extends \ShopBuilder {
 		$this->metadata->setTitle("Index");
 	}
 
-	protected function content() {}
+	protected function content() {
+		var_dump($_SESSION);
+	}
 }
 
 new Index();

@@ -16,11 +16,17 @@ class History extends \SessionModel {
 
 	public function addProduct($product) {
 		$element = $product->asHistoryItem();
+		if (is_null($element["name"])) {
+			return;
+		}
 		$this->viewed_products[] = $element;
 	}
 
 	public function addCategory($category) {
 		$element = $category->asHistoryItem();
+		if (is_null($element["name"])) {
+			return;
+		}
 		$this->viewed_categories[] = $element;
 	}
 

@@ -15,28 +15,11 @@ class Order extends \DBModel {
 	];
 
 	public static function getOrders($db) {
-		$rows = static::select("o.*")
-					->from(static::class, "o")
-					->orderBy('o.id', 'desc')
-					->execute($db)
-					->getAll();
-
-		$orders = [];
-		foreach ($rows as $row) {
-			$orders[] = static::fromArray($row);
-		}
-		return $orders;
+		return array_reverse(static::getItems($db));
 	}
 
 	public static function getOrder($db, $order_id) {
-		$row = static::select("o.*")
-					->from(static::class, "o")
-					->where('o.id = :id')
-					->setParameter(':id', $order_id)
-					->execute($db)
-					->getRow();
-		$order = static::fromArray($row);
-		return $order;
+		return static::getSingleItem($db, ["id" => $order_id]);
 	}
 
 	public static function getProducts($db, $order_id) {

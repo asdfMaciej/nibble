@@ -9,7 +9,7 @@ $router->route('', 'index.php');
 $router->route('category(?:\/([^\/]+)\/?|\/?)', 'category.php');
 $router->route('order(?:\/([^\/]*)\/?|\/?)', 'order.php');
 $router->route('product\/([^\/]+)\/?', 'product.php');
-$router->route('basket\/{0,1}', 'basket.php');
+$router->route('basket\/?', 'basket.php');
 
 $router->execute();
 ?>

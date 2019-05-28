@@ -1,6 +1,5 @@
 <?php
 namespace Web\Pages;
-use \PDO;
 use \Model\CategoryProducts;
 use \Model\Category;
 

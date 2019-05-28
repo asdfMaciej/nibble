@@ -57,12 +57,6 @@ class WebBuilder {
 	protected $data;
 	protected $snackbar;
 
-	protected $token = "";
-	protected $get_method = "get";
-
-	protected $token_get = "token";
-	protected $call_name;
-
 	protected $functions_map = [];
 
 	public function __construct() {

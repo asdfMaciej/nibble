@@ -87,14 +87,7 @@ class Product extends \DBModel {
 	}
 
 	public static function getProduct($db, $slug) {
-		$row = static::select("product.*")
-					->from(static::class, "product")
-					->where("product.key_pl = :slug")
-					->setParameter(":slug", $slug)
-					->execute($db)
-					->getRow();
-		$product = static::fromArray($row);
-		return $product;
+		return static::getSingleItem($db, ["slug" => $slug]);
 	}
 
 	public function isEmpty() {

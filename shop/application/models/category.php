@@ -58,13 +58,7 @@ class Category extends \DBModel {
 	}
 
 	public static function getCategory($db, $slug) {
-		$row = static::select("category.*")
-					->from(static::class, "category")
-					->where("category.key_pl = :slug")
-					->setParameter(":slug", $slug)
-					->execute($db)
-					->getRow();
-		return static::fromArray($row);
+		return static::getSingleItem($db, ["slug" => $slug]);
 	}
 
 	public static function getChildCategories($db, $slug="") {

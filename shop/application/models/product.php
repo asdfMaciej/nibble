@@ -125,6 +125,10 @@ class Product extends \DBModel {
 		return $item;
 	}
 
+	public static function fromHistoryItem($db, $item) {
+		return static::getSingleItem($db, ["id" => $item["id"]]);
+	}
+
 	public static function fromBasketItem($item) {
 		$product = new Product();
 

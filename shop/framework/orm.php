@@ -112,6 +112,7 @@ class QueryBuilder {
 	private $table = "";
 	private $where = "";
 	private $order = "";
+	private $group = "";
 	private $parameters = [];
 	private $joins = [];
 
@@ -153,6 +154,14 @@ class QueryBuilder {
 		$this->order = "";
 		if ($column) {
 			$this->order = "ORDER BY $column $direction";
+		}
+		return $this;
+	}
+
+	public function groupBy($column) {
+		$this->group = "";
+		if ($column) {
+			$this->group = "GROUP BY $column";
 		}
 		return $this;
 	}
@@ -207,6 +216,7 @@ class QueryBuilder {
 		$joins = implode("\n", $this->joins);
 		$q .= "$joins\n";
 		$q .= "$this->where\n";
+		$q .= "$this->group\n";
 		$q .= "$this->order";
 
 		return $q;

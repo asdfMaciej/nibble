@@ -38,20 +38,27 @@ class Category extends \DBModel {
 		return is_null($this->id);
 	}
 
-	public static function getProducts($db, $slug) {
-		$rows = static::select("product.*")
+	public static function getProducts($db, $slug="") {
+		$rows = static::select("product.*, category.key_pl AS category_slug, category.id as category_id")
 					->from(static::class, "category")
 					->leftJoin(ProductConnection::class, "connection",
 								"category.id = connection.cid")
 					->innerJoin(Product::class, "product",
-								"product.id = connection.pid")
-					->where("category.key_pl = :slug")
-					->setParameter(":slug", $slug)
-					->execute($db)
+								"product.id = connection.pid");
+		if ($slug != "") {
+			$rows->where("category.key_pl = :slug")
+					->setParameter(":slug", $slug);
+		}
+					
+		$rows = $rows->execute($db)
 					->getAll();
+
 		$products = [];
 		foreach ($rows as $product) {
-			$products[] = Product::fromArray($product);
+			$p = Product::fromArray($product);
+			$p->category_slug = $product["category_slug"];
+			$p->category_id = $product["category_id"];
+			$products[] = $p;
 		}
 
 		return $products;

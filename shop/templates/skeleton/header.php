@@ -16,6 +16,7 @@
 			<a href="/shop/category">Kategorie i produkty</a>
 			<a href="/shop/order">Zamówienia</a>
 			<a href="/shop/basket">Koszyk</a>
+			<a href="/shop/recommendations">Rekomendacje</a>
 		</div>
 
 		<div id="content">
